@@ -37,7 +37,7 @@ def main():
     bt1 = result["backtest"]["one_day"]["folds_beating_persistence"]
     bt7 = result["backtest"]["seven_day"]["folds_beating_persistence"]
     bias7 = {k: v["bias_percentage_points"] for k, v in result["seven_day_horizon"]["metrics"].items()}
-    alerts = result["official_band_alerts"]
+    alerts = result["exploratory_volume_signals"]
     ridge_alerts = alerts["models"]["ridge"]
     OUT.parent.mkdir(parents=True, exist_ok=True)
     pdf = canvas.Canvas(str(OUT), pagesize=A4)
@@ -89,7 +89,7 @@ def main():
     y -= 9
     y = section("Interpretação", f"Ridge venceu a persistência em {bt1['ridge']}/5 janelas (1 dia) e {bt7['ridge']}/5 (7 dias); Random Forest em {bt1['random_forest']}/5 e {bt7['random_forest']}/5. Em 7 dias os modelos foram otimistas na queda (viés Ridge {bias7['ridge']:+.2f} pp): superestimar água é o erro mais grave, pois gera falsa tranquilidade. Erro baixo em 1 dia reflete a mudança lenta do reservatório, não antecipação de eventos críticos.", y)
     y -= 8
-    y = section("Alertas por faixa oficial (ANA/DAEE 925/2017)", f"Alerta quando a previsão de 7 dias cai numa faixa pior (Normal ≥ 60%, Atenção, Alerta, Restrição, Especial < 20%). Fora da amostra houve {alerts['days_with_real_worsening']} dias com piora e {len(alerts['band_transitions_observed'])} mudanças de faixa: a persistência perdeu todas; o Ridge acertou {ridge_alerts['true_alerts']} dias, com {ridge_alerts['false_alerts']} falsos alertas, e avisou {', '.join(map(str, ridge_alerts['lead_days_per_transition']))} dias antes de cada mudança. Amostra pequena: alta incerteza.", y)
+    y = section("Regra exploratória por volume", f"A sinalização diária usa limites derivados das faixas da Resolução ANA/DAEE 925/2017; não é alerta oficial, pois o enquadramento operacional é mensal. Prevê piora de faixa em 7 dias. Fora da amostra houve {alerts['days_with_real_worsening']} dias com piora e {len(alerts['band_transitions_observed'])} mudanças: persistência perdeu todas; Ridge acertou {ridge_alerts['true_alerts']} dias, com {ridge_alerts['false_alerts']} falsos alertas, e avisou {', '.join(map(str, ridge_alerts['lead_days_per_transition']))} dias antes de cada mudança. Amostra pequena: alta incerteza.", y)
     y -= 8
     y = section("Decisão responsável", "Não usar os modelos para alerta público ou racionamento. Próximos passos: estimar intervalos de incerteza, conferir semântica e horário das medições, incorporar outros sistemas, validar os alertas em mais mudanças de faixa e submeter qualquer mensagem à revisão humana.", y)
     y -= 12

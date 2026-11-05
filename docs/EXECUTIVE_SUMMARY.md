@@ -23,9 +23,9 @@ Treinamos com alvos anteriores a 01/07/2025 e testamos em 184 alvos de julho a d
 
 Em backtest com cinco janelas de três meses (out/2024 a dez/2025), Ridge venceu a persistência em 5/5 janelas nos dois horizontes; a Random Forest em 5/5 (1 dia) e 4/5 (7 dias). Em 7 dias os modelos foram **otimistas** na queda (viés Ridge +0,37 p.p.; Random Forest +1,38 p.p.): superestimar água é o erro mais grave, pois gera falsa tranquilidade. O erro baixo de 1 dia reflete a mudança lenta do reservatório, não antecipação de risco raro.
 
-## Alertas por faixa oficial
+## Regra exploratória por faixa de volume
 
-Critério de risco: faixas de operação do Cantareira da Resolução Conjunta ANA/DAEE nº 925/2017 (Normal ≥ 60%, Atenção 40–60%, Alerta 30–40%, Restrição 20–30%, Especial < 20%), aplicadas aqui ao volume diário. Alerta = previsão para 7 dias numa faixa pior que a atual. Fora da amostra (457 dias, out/2024–dez/2025), houve 18 dias com piora real e três mudanças de faixa (Alerta em 06/08, Restrição em 19/09 e Especial em 07/12/2025). A persistência perdeu todas; o Ridge acertou 10 dos 18 dias (6 falsos alertas) e avisou 3, 4 e 6 dias antes de cada mudança. Com só três mudanças, esses números têm alta incerteza.
+Usamos os limites percentuais associados às faixas de operação do Cantareira na Resolução Conjunta ANA/DAEE nº 925/2017 (Normal ≥ 60%, Atenção 40–<60%, Alerta 30–<40%, Restrição 20–<30%, Especial <20%) como referência para um experimento diário. A resolução estabelece o enquadramento operacional mensal, definido pela ANA/DAEE; portanto, nossa regra diária não é o alerta oficial nem reproduz a decisão administrativa. No experimento, sinalizamos quando a previsão de sete dias cruza para uma faixa de volume de maior severidade. Fora da amostra (457 dias, out/2024–dez/2025), houve 18 dias com piora real e três mudanças de faixa (Alerta em 06/08, Restrição em 19/09 e Especial em 07/12/2025). A persistência perdeu todas; o Ridge acertou 10 dos 18 dias (6 falsos alertas) e avisou 3, 4 e 6 dias antes de cada mudança. Com só três mudanças, esses números têm alta incerteza.
 
 ## Riscos e recomendação
 

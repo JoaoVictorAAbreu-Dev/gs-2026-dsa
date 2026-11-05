@@ -73,8 +73,8 @@ class ModelTests(unittest.TestCase):
         self.assertAlmostEqual(result["max_abs_error_percentage_points"], 2.0)
 
 
-class OfficialBandTests(unittest.TestCase):
-    def test_band_boundaries_follow_ana_resolution(self):
+class ReferenceVolumeBandTests(unittest.TestCase):
+    def test_reference_band_boundaries_follow_resolution_thresholds(self):
         # >=60 Normal, [40,60) Atenção, [30,40) Alerta, [20,30) Restrição, <20 Especial
         self.assertEqual(list(band_of([60, 59.99, 40, 39.99, 30, 29.99, 20, 19.99])), [1, 2, 2, 3, 3, 4, 4, 5])
 

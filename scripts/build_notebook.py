@@ -78,8 +78,8 @@ for key, label in [('one_day', '1 dia'), ('seven_day', '7 dias')]:
 
 
 ALERTS = """\
-alerts = result['official_band_alerts']
-print('Faixa oficial correspondente ao último volume da série:', result['latest_official_band'])
+alerts = result['exploratory_volume_signals']
+print('Faixa de volume de referência correspondente ao último valor da série:', result['latest_reference_volume_band'])
 print('Mudanças de faixa observadas:', alerts['band_transitions_observed'])
 print(f"Dias avaliados fora da amostra: {alerts['evaluated_days']}; dias com piora real de faixa em 7 dias: {alerts['days_with_real_worsening']}")
 display(pd.DataFrame(alerts['models']).T[['true_alerts', 'false_alerts', 'missed_worsening_days', 'recall', 'precision', 'lead_days_per_transition']])"""
@@ -127,11 +127,11 @@ def cells() -> list:
         code(BACKTEST),
         md(
             "## Níveis de risco e alertas\n\n"
-            "Critério de risco: as **faixas oficiais de operação do Cantareira** da Resolução Conjunta ANA/DAEE nº 925/2017 "
+            "Usamos como referência os **limites percentuais das faixas de operação do Cantareira** da Resolução Conjunta ANA/DAEE nº 925/2017 "
             "([ANA](https://www.gov.br/ana/pt-br/assuntos/noticias-e-eventos/noticias/sistema-cantareira-opera-abaixo-de-20-do-seu-volume-util-e-podera-entrar-na-faixa-especial-em-janeiro-de-2026)): "
             "Normal ≥ 60%, Atenção 40–60%, Alerta 30–40%, Restrição 20–30% e Especial < 20%. "
-            "A ANA aplica a faixa pelo volume do último dia de cada mês; aqui a usamos sobre o volume diário, o que é uma simplificação.\n\n"
-            "**Regra de alerta:** avisar quando a previsão para daqui a 7 dias cair numa faixa pior que a de hoje. "
+            "A resolução prevê enquadramento operacional mensal definido pela ANA/DAEE. Aplicar os limites diariamente neste estudo é uma regra exploratória de volume, não um alerta oficial nem o enquadramento operacional vigente.\n\n"
+            "**Regra exploratória:** sinalizar quando a previsão para daqui a 7 dias cair numa faixa de volume mais severa que a de hoje. "
             "Avaliamos fora da amostra (previsões das janelas do backtest). **Falso negativo** (a faixa piora sem aviso) é o erro caro; "
             "**falso alerta** custa uma revisão humana. A persistência nunca avisa, por isso perde todas as mudanças."
         ),
@@ -142,8 +142,7 @@ def cells() -> list:
             "Ridge venceu em todas as janelas nos dois horizontes; a Random Forest venceu em 1 dia e foi mais instável em 7 dias.\n"
             "- **Consequência dos erros:** superestimar o volume durante uma queda (viés positivo) é o erro mais grave, "
             "pois transmite falsa tranquilidade. Em 7 dias os modelos foram otimistas no período de queda; por isso o viés é reportado junto do MAE.\n"
-            "- **Alertas:** o alerta de mudança de faixa usa critério oficial, mas é apoio à revisão humana: não declara crise, "
-            "não substitui o enquadramento mensal da ANA e não recomenda racionamento. Faltam intervalos de incerteza; "
+            "- **Sinalização exploratória:** a regra diária usa limites de volume derivados da resolução, mas não é o enquadramento operacional mensal da ANA/DAEE, não declara crise e não recomenda racionamento. Faltam intervalos de incerteza; "
             "com apenas três mudanças de faixa no período, recall e precisão têm alta incerteza.\n"
             "- Um sistema não representa toda a RMSP e não há dados por bairro; não inferimos interrupção de abastecimento."
         ),

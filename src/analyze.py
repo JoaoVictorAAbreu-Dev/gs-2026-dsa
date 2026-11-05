@@ -26,9 +26,10 @@ OUT = ROOT / "reports"
 SPLIT = pd.Timestamp("2025-07-01")
 # Rolling-origin backtest: each fold trains on targets before the origin and tests the next 3 months.
 BACKTEST_ORIGINS = [pd.Timestamp(d) for d in ("2024-10-01", "2025-01-01", "2025-04-01", "2025-07-01", "2025-10-01")]
-# Official Cantareira operating bands (Resolução Conjunta ANA/DAEE nº 925/2017), as published by ANA:
+# Reference volume bands from the Cantareira operating rules (Resolução Conjunta ANA/DAEE nº 925/2017):
 # https://www.gov.br/ana/pt-br/assuntos/noticias-e-eventos/noticias/sistema-cantareira-opera-abaixo-de-20-do-seu-volume-util-e-podera-entrar-na-faixa-especial-em-janeiro-de-2026
-# ANA applies the band from the volume on the last day of each month; here it is applied to daily volume.
+# ANA/DAEE establishes the operating band monthly. Applying these thresholds to daily observations below
+# is an exploratory research rule, not an official daily operating status or public alert.
 OFFICIAL_BANDS = [  # (band, name, lower bound in % of useful volume, inclusive)
     (1, "Normal", 60.0),
     (2, "Atenção", 40.0),
@@ -97,7 +98,7 @@ def indicator_table(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def band_of(storage_pct) -> np.ndarray:
-    """Official band number (1 = Normal ... 5 = Especial) for each storage value."""
+    """Exploratory volume band number (1 = Normal ... 5 = Especial) for each value."""
     values = np.asarray(storage_pct, dtype=float)
     return np.select([values >= lower for _, _, lower in OFFICIAL_BANDS[:-1]], [b for b, _, _ in OFFICIAL_BANDS[:-1]], 5)
 
@@ -198,7 +199,7 @@ def out_of_sample_predictions(frame: pd.DataFrame, horizon_days: int, origins: l
 
 
 def band_alerts(frame: pd.DataFrame, horizon_days: int = 7) -> dict:
-    """Alert = the forecast for t+h falls in a worse official band than today's volume.
+    """Signal when the forecast falls in a more severe reference volume band than today's.
 
     A false negative (band worsens without warning) is the costly error: it gives false reassurance.
     A false alert costs a human review. Persistence never alerts, so it misses every transition.
@@ -212,7 +213,7 @@ def band_alerts(frame: pd.DataFrame, horizon_days: int = 7) -> dict:
         transitions.append({"date": data.loc[index, "date"].date().isoformat(), "new_band": int(observed_band[index])})
     result = {
         "horizon_days": horizon_days,
-        "rule": "alert when the predicted storage for t+h is in a worse official band than storage at t",
+        "rule": "exploratory signal when predicted storage for t+h is in a more severe reference volume band than storage at t",
         "evaluated_days": int(len(data)),
         "days_with_real_worsening": int(actual.sum()),
         "band_transitions_observed": transitions,
@@ -285,8 +286,8 @@ def run(data_path: Path = DATA, out_dir: Path = OUT) -> dict:
         "metrics": one_day["metrics"],
         "seven_day_horizon": seven_day,
         "backtest": {"one_day": backtest(frame, 1), "seven_day": backtest(frame, 7)},
-        "official_band_alerts": band_alerts(frame, 7),
-        "latest_official_band": next(name for band, name, _ in OFFICIAL_BANDS if band == int(band_of([latest["storage_pct"]])[0])),
+        "exploratory_volume_signals": band_alerts(frame, 7),
+        "latest_reference_volume_band": next(name for band, name, _ in OFFICIAL_BANDS if band == int(band_of([latest["storage_pct"]])[0])),
         "warning": "These are exploratory regression results, not validated risk alerts or racionamento decisions.",
     }
     (out_dir / "results.json").write_text(
