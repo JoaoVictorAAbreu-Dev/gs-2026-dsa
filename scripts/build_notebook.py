@@ -77,6 +77,14 @@ for key, label in [('one_day', '1 dia'), ('seven_day', '7 dias')]:
     print('Janelas em que o modelo venceu a persistência:', bt['folds_beating_persistence'])"""
 
 
+ALERTS = """\
+alerts = result['official_band_alerts']
+print('Faixa oficial correspondente ao último volume da série:', result['latest_official_band'])
+print('Mudanças de faixa observadas:', alerts['band_transitions_observed'])
+print(f"Dias avaliados fora da amostra: {alerts['evaluated_days']}; dias com piora real de faixa em 7 dias: {alerts['days_with_real_worsening']}")
+display(pd.DataFrame(alerts['models']).T[['true_alerts', 'false_alerts', 'missed_worsening_days', 'recall', 'precision', 'lead_days_per_transition']])"""
+
+
 def cells() -> list:
     md, code = nbf.v4.new_markdown_cell, nbf.v4.new_code_cell
     return [
@@ -118,13 +126,25 @@ def cells() -> list:
         md("## Validação em várias janelas\n\nBacktest com origem móvel: cada janela treina com tudo antes da origem e testa os três meses seguintes."),
         code(BACKTEST),
         md(
+            "## Níveis de risco e alertas\n\n"
+            "Critério de risco: as **faixas oficiais de operação do Cantareira** da Resolução Conjunta ANA/DAEE nº 925/2017 "
+            "([ANA](https://www.gov.br/ana/pt-br/assuntos/noticias-e-eventos/noticias/sistema-cantareira-opera-abaixo-de-20-do-seu-volume-util-e-podera-entrar-na-faixa-especial-em-janeiro-de-2026)): "
+            "Normal ≥ 60%, Atenção 40–60%, Alerta 30–40%, Restrição 20–30% e Especial < 20%. "
+            "A ANA aplica a faixa pelo volume do último dia de cada mês; aqui a usamos sobre o volume diário, o que é uma simplificação.\n\n"
+            "**Regra de alerta:** avisar quando a previsão para daqui a 7 dias cair numa faixa pior que a de hoje. "
+            "Avaliamos fora da amostra (previsões das janelas do backtest). **Falso negativo** (a faixa piora sem aviso) é o erro caro; "
+            "**falso alerta** custa uma revisão humana. A persistência nunca avisa, por isso perde todas as mudanças."
+        ),
+        code(ALERTS),
+        md(
             "## Interpretação, consequências dos erros e alertas\n\n"
             "- A persistência já é forte porque o volume muda devagar; um modelo só é útil se vencê-la de forma consistente. "
             "Ridge venceu em todas as janelas nos dois horizontes; a Random Forest venceu em 1 dia e foi mais instável em 7 dias.\n"
             "- **Consequência dos erros:** superestimar o volume durante uma queda (viés positivo) é o erro mais grave, "
             "pois transmite falsa tranquilidade. Em 7 dias os modelos foram otimistas no período de queda; por isso o viés é reportado junto do MAE.\n"
-            "- **Alertas:** este trabalho **não emite alertas**. Para emiti-los seria preciso limiares fundamentados em fonte oficial, "
-            "intervalos de incerteza e revisão humana. Os indicadores de variação apenas sinalizam períodos que merecem análise.\n"
+            "- **Alertas:** o alerta de mudança de faixa usa critério oficial, mas é apoio à revisão humana: não declara crise, "
+            "não substitui o enquadramento mensal da ANA e não recomenda racionamento. Faltam intervalos de incerteza; "
+            "com apenas três mudanças de faixa no período, recall e precisão têm alta incerteza.\n"
             "- Um sistema não representa toda a RMSP e não há dados por bairro; não inferimos interrupção de abastecimento."
         ),
         md(

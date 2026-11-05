@@ -4,7 +4,7 @@ import pandas as pd
 
 import numpy as np
 
-from src.analyze import backtest, evaluate_horizon, feature_table, indicator_table, scores
+from src.analyze import band_alerts, band_of, backtest, evaluate_horizon, feature_table, indicator_table, scores
 
 
 class FeatureTests(unittest.TestCase):
@@ -71,6 +71,19 @@ class ModelTests(unittest.TestCase):
         result = scores(np.array([10.0, 10.0]), np.array([11.0, 12.0]))
         self.assertAlmostEqual(result["bias_percentage_points"], 1.5)
         self.assertAlmostEqual(result["max_abs_error_percentage_points"], 2.0)
+
+
+class OfficialBandTests(unittest.TestCase):
+    def test_band_boundaries_follow_ana_resolution(self):
+        # >=60 Normal, [40,60) Atenção, [30,40) Alerta, [20,30) Restrição, <20 Especial
+        self.assertEqual(list(band_of([60, 59.99, 40, 39.99, 30, 29.99, 20, 19.99])), [1, 2, 2, 3, 3, 4, 4, 5])
+
+    def test_persistence_never_warns_and_transitions_are_found(self):
+        result = band_alerts(declining_series(), 7)
+        self.assertGreater(result["days_with_real_worsening"], 0)
+        self.assertEqual(result["models"]["persistence"]["true_alerts"], 0)
+        self.assertGreater(result["models"]["ridge"]["recall"], 0.5)
+        self.assertTrue(all(t["new_band"] in (2, 3, 4, 5) for t in result["band_transitions_observed"]))
 
 
 class IndicatorTests(unittest.TestCase):

@@ -21,6 +21,8 @@ EDA: 731 dias sem lacunas; volume útil entre 19,68% e 78,12%, mediana 54,39%; s
 
 **Interpretação:** persistência é um baseline forte porque o volume muda gradualmente. O erro de Ridge em 1 dia é plausível nesse contexto, mas não prova antecipação de escassez. Em 7 dias, no período de queda, os modelos foram otimistas (viés Ridge +0,37 p.p.; floresta +1,38 p.p.): superestimar água é o erro mais grave porque gera falsa tranquilidade.
 
+**Alertas por faixa oficial (ANA/DAEE 925/2017), horizonte de 7 dias, fora da amostra:** 457 dias, 18 com piora real de faixa, três mudanças observadas. Persistência: 0 acertos, 18 perdidos. Ridge: 10 acertos, 6 falsos alertas, 8 perdidos; antecedência de 3, 4 e 6 dias nas três mudanças. Random Forest: 2 acertos, 3 falsos alertas, 16 perdidos. Falso negativo é o erro caro (falsa tranquilidade); falso alerta custa revisão humana. A ANA enquadra a faixa pelo volume do último dia do mês; aplicar ao volume diário é simplificação nossa. Conferência independente: a série fica abaixo de 20% a partir de 07/12/2025, e a ANA informou em 09/12/2025 que o sistema operava abaixo de 20%.
+
 **Limites:** um único sistema; sem limiares de risco, intervalos de incerteza ou validação com especialistas. Os dados não permitem inferir interrupção por bairro nem justificar racionamento. Os resultados não são alertas operacionais.
 
 Saídas locais: reports/results.json e reports/overview.png. Ambas são ignoradas no Git até confirmar licença de redistribuição.

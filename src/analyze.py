@@ -26,6 +26,16 @@ OUT = ROOT / "reports"
 SPLIT = pd.Timestamp("2025-07-01")
 # Rolling-origin backtest: each fold trains on targets before the origin and tests the next 3 months.
 BACKTEST_ORIGINS = [pd.Timestamp(d) for d in ("2024-10-01", "2025-01-01", "2025-04-01", "2025-07-01", "2025-10-01")]
+# Official Cantareira operating bands (Resolução Conjunta ANA/DAEE nº 925/2017), as published by ANA:
+# https://www.gov.br/ana/pt-br/assuntos/noticias-e-eventos/noticias/sistema-cantareira-opera-abaixo-de-20-do-seu-volume-util-e-podera-entrar-na-faixa-especial-em-janeiro-de-2026
+# ANA applies the band from the volume on the last day of each month; here it is applied to daily volume.
+OFFICIAL_BANDS = [  # (band, name, lower bound in % of useful volume, inclusive)
+    (1, "Normal", 60.0),
+    (2, "Atenção", 40.0),
+    (3, "Alerta", 30.0),
+    (4, "Restrição", 20.0),
+    (5, "Especial", float("-inf")),
+]
 FEATURES = ["storage_pct", "storage_7d_mean", "storage_7d_delta", "rain_mm", "rain_7d_sum"]
 
 # Documented indicators (DSA-04): formula, unit, periodicity and interpretation.
@@ -84,6 +94,12 @@ def indicator_table(frame: pd.DataFrame) -> pd.DataFrame:
     data["storage_change_30d_pp"] = data["storage_pct"] - data["storage_pct"].shift(30)
     data["rain_30d_mm"] = data["rain_mm"].rolling(30, min_periods=30).sum()
     return data[["date", *INDICATORS]]
+
+
+def band_of(storage_pct) -> np.ndarray:
+    """Official band number (1 = Normal ... 5 = Especial) for each storage value."""
+    values = np.asarray(storage_pct, dtype=float)
+    return np.select([values >= lower for _, _, lower in OFFICIAL_BANDS[:-1]], [b for b, _, _ in OFFICIAL_BANDS[:-1]], 5)
 
 
 def scores(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
@@ -167,6 +183,61 @@ def backtest(frame: pd.DataFrame, horizon_days: int, origins: list[pd.Timestamp]
     }
 
 
+def out_of_sample_predictions(frame: pd.DataFrame, horizon_days: int, origins: list[pd.Timestamp] = BACKTEST_ORIGINS) -> pd.DataFrame:
+    """Concatenate each backtest fold's test predictions; every row is predicted by a model trained only on the past."""
+    table = feature_table(frame, horizon_days=horizon_days)
+    parts = []
+    for origin in origins:
+        train = table[table["target_date"] < origin]
+        test = table[(table["target_date"] >= origin) & (table["target_date"] < origin + pd.DateOffset(months=3))]
+        fold = test[["date", "target_date", "storage_pct", "target_next_day"]].copy()
+        for name, predicted in _fit_predict(train, test).items():
+            fold[name] = predicted
+        parts.append(fold)
+    return pd.concat(parts, ignore_index=True)
+
+
+def band_alerts(frame: pd.DataFrame, horizon_days: int = 7) -> dict:
+    """Alert = the forecast for t+h falls in a worse official band than today's volume.
+
+    A false negative (band worsens without warning) is the costly error: it gives false reassurance.
+    A false alert costs a human review. Persistence never alerts, so it misses every transition.
+    """
+    data = out_of_sample_predictions(frame, horizon_days)
+    today = band_of(data["storage_pct"])
+    actual = band_of(data["target_next_day"]) > today
+    transitions = []
+    observed_band = band_of(data["storage_pct"])
+    for index in np.flatnonzero(np.diff(observed_band) > 0) + 1:
+        transitions.append({"date": data.loc[index, "date"].date().isoformat(), "new_band": int(observed_band[index])})
+    result = {
+        "horizon_days": horizon_days,
+        "rule": "alert when the predicted storage for t+h is in a worse official band than storage at t",
+        "evaluated_days": int(len(data)),
+        "days_with_real_worsening": int(actual.sum()),
+        "band_transitions_observed": transitions,
+        "models": {},
+    }
+    for name in ("persistence", "ridge", "random_forest"):
+        alert = band_of(data[name]) > today
+        tp, fp, fn = int((alert & actual).sum()), int((alert & ~actual).sum()), int((~alert & actual).sum())
+        lead_times = []
+        for transition in transitions:
+            moment = pd.Timestamp(transition["date"])
+            window = data[(data["date"] < moment) & (data["date"] >= moment - pd.Timedelta(days=horizon_days))]
+            warned = window[(band_of(window[name]) >= transition["new_band"]).astype(bool)]
+            lead_times.append(int((moment - warned["date"].min()).days) if len(warned) else 0)
+        result["models"][name] = {
+            "true_alerts": tp,
+            "false_alerts": fp,
+            "missed_worsening_days": fn,
+            "recall": tp / max(int(actual.sum()), 1),
+            "precision": tp / max(tp + fp, 1),
+            "lead_days_per_transition": lead_times,
+        }
+    return result
+
+
 def run(data_path: Path = DATA, out_dir: Path = OUT) -> dict:
     report = inspect_csv(data_path, "Sabesp Portal dos Mananciais, local normalized copy")
     if not report.usable or any(report.date_gaps.values()):
@@ -214,6 +285,8 @@ def run(data_path: Path = DATA, out_dir: Path = OUT) -> dict:
         "metrics": one_day["metrics"],
         "seven_day_horizon": seven_day,
         "backtest": {"one_day": backtest(frame, 1), "seven_day": backtest(frame, 7)},
+        "official_band_alerts": band_alerts(frame, 7),
+        "latest_official_band": next(name for band, name, _ in OFFICIAL_BANDS if band == int(band_of([latest["storage_pct"]])[0])),
         "warning": "These are exploratory regression results, not validated risk alerts or racionamento decisions.",
     }
     (out_dir / "results.json").write_text(
