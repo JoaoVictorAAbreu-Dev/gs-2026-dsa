@@ -27,8 +27,10 @@ SPLIT = pd.Timestamp("2025-07-01")
 FEATURES = ["storage_pct", "storage_7d_mean", "storage_7d_delta", "rain_mm", "rain_7d_sum"]
 
 
-def feature_table(frame: pd.DataFrame) -> pd.DataFrame:
-    """Use observations available by date t to predict storage on date t+1."""
+def feature_table(frame: pd.DataFrame, horizon_days: int = 1) -> pd.DataFrame:
+    """Use observations available by date t to predict storage on date t+h."""
+    if horizon_days < 1:
+        raise ValueError("horizon_days must be positive")
     data = frame.sort_values("date").copy()
     if data["date"].duplicated().any():
         raise ValueError("Duplicate dates")
@@ -37,8 +39,8 @@ def feature_table(frame: pd.DataFrame) -> pd.DataFrame:
     data["storage_7d_mean"] = data["storage_pct"].rolling(7, min_periods=7).mean()
     data["storage_7d_delta"] = data["storage_pct"] - data["storage_pct"].shift(7)
     data["rain_7d_sum"] = data["rain_mm"].rolling(7, min_periods=7).sum()
-    data["target_date"] = data["date"].shift(-1)
-    data["target_next_day"] = data["storage_pct"].shift(-1)
+    data["target_date"] = data["date"].shift(-horizon_days)
+    data["target_next_day"] = data["storage_pct"].shift(-horizon_days)
     return data.dropna(subset=FEATURES + ["target_next_day"]).copy()
 
 
@@ -49,14 +51,8 @@ def scores(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
     }
 
 
-def run(data_path: Path = DATA, out_dir: Path = OUT) -> dict:
-    report = inspect_csv(data_path, "Sabesp Portal dos Mananciais, local normalized copy")
-    if not report.usable or any(report.date_gaps.values()):
-        raise ValueError(f"Data quality check failed: {report}")
-    frame = pd.read_csv(data_path, parse_dates=["date"])
-    if frame[["storage_pct", "rain_mm"]].isna().any().any():
-        raise ValueError("Missing storage or rain values; choose/document handling first")
-    table = feature_table(frame)
+def evaluate_horizon(frame: pd.DataFrame, horizon_days: int) -> tuple[dict, pd.DataFrame, dict]:
+    table = feature_table(frame, horizon_days=horizon_days)
     train = table[table["target_date"] < SPLIT]
     test = table[table["target_date"] >= SPLIT]
     if len(train) < 100 or len(test) < 30:
@@ -74,12 +70,35 @@ def run(data_path: Path = DATA, out_dir: Path = OUT) -> dict:
     for name, model in models.items():
         model.fit(x_train, y_train)
         predictions[name] = model.predict(x_test)
+    evaluation = {
+        "horizon_days": horizon_days,
+        "target": f"volumeUtilArmazenadoPorcentagem {horizon_days} day(s) after prediction date",
+        "train_rows": len(train),
+        "test_rows": len(test),
+        "test_target_from": test["target_date"].min().date().isoformat(),
+        "test_target_to": test["target_date"].max().date().isoformat(),
+        "metrics": {
+            name: scores(y_test.to_numpy(), predicted)
+            for name, predicted in predictions.items()
+        },
+    }
+    return evaluation, test, predictions
 
-    metrics = {name: scores(y_test.to_numpy(), predicted) for name, predicted in predictions.items()}
+
+def run(data_path: Path = DATA, out_dir: Path = OUT) -> dict:
+    report = inspect_csv(data_path, "Sabesp Portal dos Mananciais, local normalized copy")
+    if not report.usable or any(report.date_gaps.values()):
+        raise ValueError(f"Data quality check failed: {report}")
+    frame = pd.read_csv(data_path, parse_dates=["date"])
+    if frame[["storage_pct", "rain_mm"]].isna().any().any():
+        raise ValueError("Missing storage or rain values; choose/document handling first")
+    one_day, test, predictions = evaluate_horizon(frame, 1)
+    seven_day, _, _ = evaluate_horizon(frame, 7)
+    y_test = test["target_next_day"]
     out_dir.mkdir(parents=True, exist_ok=True)
     result = {
-        "question": "How accurately can next-day Cantareira useful storage percentage be estimated?",
-        "scope": "Single system, daily observations, one-day horizon; no neighborhood supply prediction",
+        "question": "How accurately can Cantareira useful storage percentage be estimated 1 and 7 days ahead?",
+        "scope": "Single system, daily observations, 1- and 7-day horizons; no neighborhood supply prediction",
         "source": "Sabesp Portal dos Mananciais; see docs/DATA_SOURCE.md",
         "period": [report.first_date, report.last_date],
         "rows": report.rows,
@@ -97,12 +116,13 @@ def run(data_path: Path = DATA, out_dir: Path = OUT) -> dict:
         "feature_date_constraint": "all features observed on or before prediction date",
         "split": {
             "train_target_before": SPLIT.date().isoformat(),
-            "train_rows": len(train),
-            "test_rows": len(test),
+            "train_rows": one_day["train_rows"],
+            "test_rows": one_day["test_rows"],
             "test_target_from": test["target_date"].min().date().isoformat(),
             "test_target_to": test["target_date"].max().date().isoformat(),
         },
-        "metrics": metrics,
+        "metrics": one_day["metrics"],
+        "seven_day_horizon": seven_day,
         "warning": "These are exploratory regression results, not validated risk alerts or racionamento decisions.",
     }
     (out_dir / "results.json").write_text(
