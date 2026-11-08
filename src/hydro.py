@@ -75,6 +75,12 @@ def faixa(volume_pct: float) -> int:
     return 5
 
 
+def faixa_estendida(volume_pct: float) -> int:
+    """Faixa para séries longas: valores negativos (uso da reserva técnica, 2014–2016) contam como faixa 5
+    e valores acima de 100 % como faixa 1."""
+    return faixa(min(max(volume_pct, 0.0), 100.0))
+
+
 def nome_faixa(numero: int) -> str:
     return {n: nome for n, nome, _ in FAIXAS}[numero]
 

@@ -19,6 +19,10 @@ class FaixaTests(unittest.TestCase):
     def test_limites_oficiais(self):
         self.assertEqual([hydro.faixa(v) for v in (60, 59.99, 40, 30, 20, 19.9)], [1, 2, 2, 3, 4, 5])
 
+    def test_faixa_estendida_reserva_tecnica(self):
+        self.assertEqual(hydro.faixa_estendida(-12.5), 5)
+        self.assertEqual(hydro.faixa_estendida(102.7), 1)
+
     def test_volume_invalido(self):
         with self.assertRaises(ValueError):
             hydro.faixa(101)

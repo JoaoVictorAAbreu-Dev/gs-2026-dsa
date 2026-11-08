@@ -29,13 +29,13 @@ md(r"""
 
 **Integrantes:** João Victor Alves de Abreu (RM 564946) e Rodrigo Kenshin Viana Matayoshi (RM 564026).
 
-Notebook reproduzível com dados reais e públicos da Sabesp (01/01/2024 a 07/11/2026). Estrutura:
+Notebook reproduzível com dados reais e públicos da Sabesp: série **diária** do Cantareira (01/01/2024 a 07/11/2026), série **mensal** do Cantareira desde 2010 e série mensal dos demais sistemas da RMSP. Estrutura:
 
 1. Problema, público e pergunta de pesquisa
 2. Fonte, qualidade e tratamento dos dados
-3. Análise exploratória (EDA)
+3. Análise exploratória (EDA) e panorama dos sistemas da RMSP
 4. Indicadores hídricos
-5. Modelagem: regressão do volume e classificação de piora de faixa (validação *walk-forward*)
+5. Modelagem: regressão do volume, classificação de piora de faixa (validação *walk-forward*) e validação histórica 2010–2026
 6. Critérios de alerta e situação atual
 7. Conclusões e recomendações
 8. Limitações, responsabilidade e reprodutibilidade
@@ -100,6 +100,7 @@ md(r"""
 | Frequência | Diária, publicada pelo portal. |
 | Variáveis | `volumeUtilArmazenadoPorcentagem` (% do volume útil), `chuva` (mm/dia, média dos postos do sistema), `vazaoNatural` (afluência natural, m³/s) e `vazaoProduzida` (água produzida para abastecimento, m³/s). |
 | Extração | Consulta mês a mês em 08/11/2026; arquivos mensais em `data/raw/monthly/` e série consolidada em `data/cantareira_diario_2024_2026.csv`. |
+| Séries complementares | Mesma API em periodicidade mensal (`/dados/mensal/`): Cantareira 2010–2023 (`data/raw/mensal/cantareira_2010_2023.csv`) e Alto Tietê, Guarapiranga, Cotia, Rio Grande, Rio Claro, São Lourenço e Sistema Integrado Metropolitano 2024–2026 (`data/raw/mensal/sistemas_rmsp_2024_2026.csv`). O valor mensal do portal é a média do volume e a soma da chuva no mês — conferido com a série diária. |
 | Controle | O trecho 2024–2025 foi comparado com estatísticas de uma extração anterior (05/11/2026, arquivo bruto com SHA-256 registrado em `docs/DATA_SOURCE.md`): número de linhas, mínimo, máximo, mediana, chuva total e dias sem chuva coincidiram exatamente. |
 | Limitações | Um único sistema produtor; sem vazão de jusante (liberada para a bacia PCJ); chuva é média de postos, não distribuição espacial; termos explícitos de redistribuição não foram localizados — dados usados para fins acadêmicos, com atribuição à Sabesp. |
 
@@ -207,6 +208,42 @@ mensal.round(1).T
 
 md(r"""
 **Sazonalidade.** A afluência natural supera com folga a produção apenas de dezembro a março. De abril a setembro o sistema opera em déficit e perde de 1,5 a 5 p.p. por mês; outubro e novembro ficam perto do equilíbrio, dependendo de quando as chuvas começam. Isso significa que o volume no fim de março é o "colchão" para atravessar a estiagem — e que uma estação chuvosa fraca (como 2024/2025) se transforma em risco no segundo semestre seguinte. A produção é quase constante (≈ 25–31 m³/s): o ajuste de retirada acontece em degraus, conforme as faixas.
+""")
+
+md(r"""
+### Panorama dos sistemas produtores da RMSP
+
+A RMSP é abastecida por um sistema integrado. Para situar o Cantareira, usamos a série **mensal** (média do volume útil no mês) dos demais sistemas da Sabesp no mesmo período, além do **Sistema Integrado Metropolitano (SIM)**, que soma todos eles. Os valores mensais do portal conferem exatamente com as médias e somas calculadas a partir da série diária do Cantareira.
+""")
+
+code(r"""
+rmsp = pd.read_csv(ROOT / "data" / "raw" / "mensal" / "sistemas_rmsp_2024_2026.csv", parse_dates=["mes"])
+cant_mensal = df.set_index("date").storage_pct.resample("MS").mean().loc[:"2026-10-01"]
+rmsp = pd.concat([rmsp, pd.DataFrame({"mes": cant_mensal.index, "sistema": "Cantareira",
+                                      "volume_util_pct": cant_mensal.values})], ignore_index=True)
+piv_rmsp = rmsp.pivot(index="mes", columns="sistema", values="volume_util_pct")
+
+fig, ax = plt.subplots(figsize=(12, 4.2))
+for nome in piv_rmsp.columns.drop("Sistema Integrado Metropolitano"):
+    ax.plot(piv_rmsp.index, piv_rmsp[nome], lw=2.2 if nome == "Cantareira" else 1,
+            color="#0d47a1" if nome == "Cantareira" else None, alpha=1 if nome == "Cantareira" else 0.75, label=nome)
+ax.plot(piv_rmsp.index, piv_rmsp["Sistema Integrado Metropolitano"], "k--", lw=2, label="SIM (todos os sistemas)")
+ax.set(title="Volume útil médio mensal dos sistemas da RMSP (Sabesp)", ylabel="Volume útil (%)")
+ax.legend(fontsize=8, loc="center left", bbox_to_anchor=(1.01, 0.5)); ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%y"))
+fig.tight_layout(); plt.show()
+
+resumo_rmsp = pd.DataFrame({
+    "mínimo no período (%)": piv_rmsp.min().round(1),
+    "mês do mínimo": piv_rmsp.idxmin().dt.strftime("%m/%Y"),
+    "out/2026 (%)": piv_rmsp.iloc[-1].round(1),
+    "correlação com o SIM": piv_rmsp.corr()["Sistema Integrado Metropolitano"].round(2),
+}).sort_values("mínimo no período (%)")
+resumo_rmsp
+""")
+
+md(r"""
+**Leitura.** Na estiagem de 2025, três sistemas chegaram perto de 20 % na média mensal: Alto Tietê, Rio Claro e Cantareira. O SIM tem correlação de 0,95 com o Cantareira e de 0,96 com o Alto Tietê — os dois maiores sistemas determinam a situação da região. Guarapiranga, Rio Grande e São Lourenço ficaram sempre acima de 35 % e se recuperaram mais rápido. Isso justifica concentrar a modelagem no Cantareira, que além de pesar mais no total é o único sistema com regra regulatória de faixas, e usar os demais como contexto para a gestão integrada; o Alto Tietê é o próximo candidato a receber o mesmo monitoramento.
+
 """)
 
 code(r"""
@@ -426,7 +463,71 @@ md(r"""
 - O **Random Forest** teve recall bem menor no limiar 0,5. Com apenas seis mudanças de faixa no período e poucos exemplos positivos nas primeiras janelas, as árvores ficam conservadoras; um modelo linear sobre atributos bem construídos generaliza melhor com pouca informação.
 - A regra simples de autonomia é uma referência forte, o que é uma boa notícia para a gestão: o sinal é explicável e auditável. O modelo acrescenta uma **probabilidade**, útil para ordenar a prioridade de avaliação.
 - **Erros que importam:** os 15 falsos negativos da Regressão Logística ocorreram (a) no começo de episódios, quando faltavam 34–43 dias para a mudança — o aviso veio alguns dias depois do ideal — e (b) em dez/2025, quando uma chuva elevou o volume para pouco acima de 20 % e o sistema voltou a cair em seguida. A maioria dos falsos positivos (43 de 56) está em ago–set/2026, quando a queda em direção a 30 % foi interrompida pelas chuvas fortes de setembro — um aviso preventivo aceitável.
+""")
 
+md(r"""
+### 5.4 Validação histórica em escala mensal (2010–2026)
+
+Os testes acima cobrem menos de três anos. Para verificar se o sinal se mantém em outros ciclos — incluindo a **crise de 2014–2015** —, repetimos a avaliação com a série **mensal** do Cantareira desde 2010 (portal Sabesp). Escala mensal: faixa do mês pela média do volume útil; alvo = faixa do mês seguinte pior que a atual; regra de autonomia = alertar quando a queda do último mês, se repetida, atinge o limite da faixa em até 1 mês. Valores negativos (uso da reserva técnica em 2014–2016) contam como faixa 5. As faixas da Resolução 925/2017 são aplicadas retroativamente como critério analítico.
+""")
+
+code(r"""
+hist_m = pd.read_csv(ROOT / "data" / "raw" / "mensal" / "cantareira_2010_2023.csv", parse_dates=["mes"])
+recente = (df.set_index("date").resample("MS")
+             .agg({"storage_pct": "mean", "rain_mm": "sum", "natural_inflow_m3s": "mean", "produced_flow_m3s": "mean"})
+             .loc[:"2026-10-01"].reset_index())
+recente.columns = hist_m.columns
+mm = pd.concat([hist_m, recente], ignore_index=True)
+mm["faixa"] = mm.volume_util_pct.map(hydro.faixa_estendida)
+mm["tendencia_1m"] = mm.volume_util_pct.diff()
+mm["dist"] = np.where(mm.faixa == 5, mm.volume_util_pct.clip(lower=0), mm.volume_util_pct - mm.faixa.map(hydro.limite_inferior))
+mm["autonomia_meses"] = np.where(mm.tendencia_1m < 0, mm.dist / -mm.tendencia_1m, 99)
+mm["balanco"] = mm.vazao_natural_m3s - mm.vazao_produzida_m3s
+mm["mes_sin"], mm["mes_cos"] = np.sin(2 * np.pi * mm.mes.dt.month / 12), np.cos(2 * np.pi * mm.mes.dt.month / 12)
+mm["piora"] = (mm.faixa.shift(-1) > mm.faixa).astype(float)
+mm.loc[mm.index[-1], "piora"] = np.nan
+val = mm.dropna(subset=["piora", "tendencia_1m"]).copy()
+val["regra"] = (val.autonomia_meses <= 1).astype(int)
+
+F_M = ["dist", "tendencia_1m", "balanco", "chuva_mm", "mes_sin", "mes_cos"]
+treino_m, teste_m = val[val.mes < "2020-01-01"], val[val.mes >= "2020-01-01"]
+lr_m = modelos_classificacao()["Regressão Logística"].fit(treino_m[F_M], treino_m.piora.astype(int))
+teste_m = teste_m.assign(prob=lr_m.predict_proba(teste_m[F_M])[:, 1])
+
+def metricas(y, yhat, prob=None):
+    return {"recall": recall_score(y, yhat), "precisão": precision_score(y, yhat),
+            "AUC": roc_auc_score(y, prob) if prob is not None else np.nan,
+            "pioras detectadas": f"{int(((yhat == 1) & (y == 1)).sum())}/{int(y.sum())}"}
+
+resumo_hist = pd.DataFrame({
+    "Regra de autonomia · 2010–2026": metricas(val.piora, val.regra),
+    "Regra de autonomia · 2020–2026": metricas(teste_m.piora, teste_m.regra),
+    "Regressão Logística · treino 2010–2019, teste 2020–2026": metricas(teste_m.piora, (teste_m.prob >= 0.5).astype(int), teste_m.prob),
+}).T
+print(f"{len(mm)} meses ({mm.mes.min():%m/%Y}–{mm.mes.max():%m/%Y}); {int(val.piora.sum())} pioras de faixa, nos meses seguintes a:",
+      ", ".join(val.loc[val.piora == 1, "mes"].dt.strftime("%m/%Y")))
+display(resumo_hist)
+
+fig, ax = plt.subplots(figsize=(12, 3.8))
+for numero, nome, lim in hydro.FAIXAS:
+    sup = 100 if numero == 1 else hydro.limite_inferior(numero - 1)
+    ax.axhspan(lim if numero < 5 else -30, sup, color=CORES_FAIXA[numero], alpha=0.10)
+ax.plot(mm.mes, mm.volume_util_pct, color="#0d47a1", lw=1.4)
+alerta_m = val[val.regra == 1]
+ax.scatter(alerta_m.mes, alerta_m.volume_util_pct, color="#c62828", s=14, zorder=3, label="regra de autonomia acionada")
+pioras = val[val.piora == 1]
+ax.scatter(pioras.mes + pd.DateOffset(months=1), mm.set_index("mes").volume_util_pct.reindex(pioras.mes + pd.DateOffset(months=1)),
+           marker="v", color="k", s=30, zorder=4, label="mês em que a faixa piorou")
+ax.axhline(0, color="k", lw=0.6)
+ax.set(title="Cantareira 2010–2026 (médias mensais): pioras de faixa e sinal de autonomia", ylabel="Volume útil (%)", ylim=(-30, 102))
+ax.legend(fontsize=8, loc="upper right"); fig.tight_layout(); plt.show()
+""")
+
+md(r"""
+**O sinal se sustenta em 16 anos.** Em escala mensal, a regra de autonomia antecipou quase todas as pioras de faixa de 2010 a 2026 — inclusive a sequência de 2013–2014, que levou o Cantareira à reserva técnica —, e a Regressão Logística treinada só com 2010–2019 detectou todas as pioras de 2020–2026 com AUC acima de 0,95. A precisão fica perto de 50 %: cerca de metade dos avisos não se confirma no mês seguinte, normalmente porque a chuva interrompeu a queda. Para um sistema de **alerta preventivo**, esse equilíbrio é adequado; para decisões mais duras, o aviso deve ser confirmado por mais de um mês de dados.
+""")
+
+md(r"""
 ## 6. Critérios de alerta e situação atual
 
 O nível de alerta combina a faixa oficial com a antecipação do modelo:
@@ -498,7 +599,7 @@ print(f"Explicação: o sistema está na faixa {int(atual.faixa)} ({hydro.nome_f
 md(r"""
 ## 7. Conclusões e recomendações
 
-**Resposta à pergunta de pesquisa.** Sim: com dados públicos diários, é possível sinalizar com até 30 dias de antecedência a entrada do Cantareira em uma faixa mais restritiva. Na validação *walk-forward* (jan/2025–set/2026), a Regressão Logística e a regra de autonomia identificaram cerca de 85 % dos dias que antecederam pioras de faixa. O sinal depende principalmente de três evidências que a gestão pode verificar: distância até o limite da faixa, tendência de queda e balanço hídrico negativo.
+**Resposta à pergunta de pesquisa.** Sim: com dados públicos diários, é possível sinalizar com até 30 dias de antecedência a entrada do Cantareira em uma faixa mais restritiva. Na validação *walk-forward* diária (jan/2025–set/2026), a Regressão Logística e a regra de autonomia identificaram cerca de 85 % dos dias que antecederam pioras de faixa; na validação mensal de 2010 a 2026, a regra antecipou 16 das 17 pioras de faixa, e a Regressão Logística treinada até 2019 detectou todas as 9 pioras de 2020–2026. O sinal depende principalmente de três evidências que a gestão pode verificar: distância até o limite da faixa, tendência de queda e balanço hídrico negativo.
 
 **O que os dados não permitem:** prever com precisão o volume daqui a 30 dias na estação chuvosa. Modelos de ML não superaram a extrapolação de tendência nesse horizonte; o volume futuro depende de chuva ainda não observada.
 
@@ -508,11 +609,11 @@ md(r"""
 1. **Usar o volume no fim de março como indicador-chave do ano.** Como o sistema consome estoque de abril a novembro, um volume baixo em março antecipa risco no segundo semestre; esse é o momento de avaliar medidas preventivas.
 2. **Acompanhar semanalmente a autonomia (I5) a partir de abril**, com atenção redobrada quando ficar abaixo de 60 dias; abaixo de 30 dias, preparar a comunicação e os planos de contingência da faixa seguinte.
 3. **Incorporar previsão meteorológica sazonal e a vazão de jusante** antes de qualquer previsão de volume para 30 dias ou mais.
-4. **Ampliar para os demais sistemas produtores (Alto Tietê, Guarapiranga etc.)**, já que o risco da RMSP depende da integração entre eles.
+4. **Estender o monitoramento de autonomia ao Alto Tietê**, que chegou ao mesmo nível crítico do Cantareira em 2025 e, junto com ele, explica quase toda a variação do Sistema Integrado.
 
 ## 8. Limitações, responsabilidade e reprodutibilidade
 
-- **Cobertura:** um sistema, menos de três anos e seis mudanças de faixa — as métricas têm incerteza amostral relevante.
+- **Cobertura:** a modelagem diária cobre menos de três anos; a validação histórica amplia para 17 pioras de faixa em 16 anos, mas em escala mensal. Os demais sistemas entram como contexto, sem modelo próprio.
 - **Variáveis ausentes:** vazão de jusante, evaporação, transferências entre sistemas e previsão de chuva.
 - **Fonte:** endpoint não documentado; os arquivos mensais brutos ficam no repositório para auditoria. A licença de redistribuição não foi localizada — uso acadêmico com atribuição.
 - **Vieses:** o período inclui uma das piores estiagens da década; outro período pode gerar coeficientes diferentes.
@@ -530,6 +631,8 @@ resultados = {
     "regressao": resumo_reg.round(3).to_dict(orient="records"),
     "classificacao": resumo_clf.round(3).reset_index().to_dict(orient="records"),
     "dias_por_nivel": hist.nivel.map(dict(enumerate(hydro.NIVEIS))).value_counts().to_dict(),
+    "validacao_historica": resumo_hist.reset_index(names="avaliacao").round(3).to_dict(orient="records"),
+    "rmsp_minimos": resumo_rmsp["mínimo no período (%)"].to_dict(),
 }
 (ROOT / "reports").mkdir(exist_ok=True)
 (ROOT / "reports" / "results.json").write_text(json.dumps(resultados, ensure_ascii=False, indent=2, default=str), encoding="utf-8")

@@ -77,6 +77,9 @@ def main() -> None:
     reg = {(x["horizonte"], x["modelo"]): x["MAE"] for x in r["regressao"]}
     clf = {x["modelo"]: x for x in r["classificacao"]}
     lr, rf, regra = clf["Regressão Logística"], clf["Random Forest"], clf["Regra de autonomia"]
+    hv = {x["avaliacao"]: x for x in r["validacao_historica"]}
+    hist_regra = hv["Regra de autonomia · 2010–2026"]
+    hist_lr = next(v for k, v in hv.items() if k.startswith("Regressão Logística"))
     num = lambda v, d=2: f"{v:.{d}f}".replace(".", ",")  # noqa: E731
 
     story = [
@@ -92,15 +95,15 @@ def main() -> None:
         Paragraph("Dados", h),
         Paragraph(f"Portal dos Mananciais (Sabesp), série diária de {r['periodo'][0]} a {r['periodo'][1]} ({r['dias']} dias): volume "
                   "útil (%), chuva (mm), vazão natural afluente e vazão produzida (m³/s). Sem lacunas, duplicidades ou ajustes; o trecho "
-                  "2024–2025 confere com uma extração anterior independente. Limites: um único sistema, sem vazão de jusante, endpoint "
-                  "não documentado.", base),
+                  "2024–2025 confere com uma extração anterior independente. Complementos: série mensal do Cantareira desde 2010 (inclui a "
+                  "crise de 2014–2015) e dos demais sistemas da RMSP. Limites: sem vazão de jusante; endpoint não documentado.", base),
         Image(grafico(), width=180 * mm, height=42.5 * mm),
         Paragraph("Indicadores", h),
         Paragraph("<b>I1</b> volume útil e faixa · <b>I2</b> tendência de 30 dias (p.p.) · <b>I3</b> balanço parcial = afluência − "
                   "produção, média de 30 dias (m³/s) · <b>I4</b> chuva acumulada de 30 dias (mm) · <b>I5</b> autonomia: dias até o "
-                  "limite da faixa se o ritmo de queda continuar. Nas seis mudanças para faixa pior do período, o I5 ficou abaixo de "
-                  "30 dias entre 24 e 29 dias antes da mudança.", base),
-        Paragraph("Modelos e resultados (validação walk-forward, 7 janelas trimestrais, jan/2025–set/2026)", h),
+                  "limite da faixa se o ritmo de queda continuar. Nas seis mudanças para faixa pior de 2024–2026, o I5 ficou abaixo de "
+                  "30 dias entre 24 e 29 dias antes da mudança. Na RMSP, Alto Tietê, Rio Claro e Cantareira chegaram perto de 20 % em 2025.", base),
+        Paragraph("Modelos e resultados (walk-forward diário em 7 janelas, jan/2025–set/2026, e validação mensal 2010–2026)", h),
     ]
     tabela = [
         ["Tarefa", "Modelo", "Resultado", "Leitura"],
@@ -108,6 +111,8 @@ def main() -> None:
          "Melhor modelo; antecipa a maioria\ndos dias que precedem uma piora"],
         ["", "Random Forest", f"recall {num(rf['recall'])} · precisão {num(rf['precisão'])}", "Conservador: poucos episódios\npara aprender"],
         ["", "Regra de autonomia (I5 ≤ 30 d)", f"recall {num(regra['recall'])} · precisão {num(regra['precisão'])}", "Referência simples e auditável"],
+        ["Validação\nhistórica\n(mensal)", "Regra · Regressão Logística", f"Regra 2010–2026: {hist_regra['pioras detectadas']} pioras\nLR (treino até 2019): {hist_lr['pioras detectadas']} em 2020–2026",
+         f"Sinal se mantém em 16 anos, inclusive\nna crise de 2014–2015 (AUC {num(hist_lr['AUC'])})"],
         ["Variação do\nvolume (MAE, p.p.)", "Ridge · Random Forest", f"7 dias: {num(reg[(7, 'Ridge')])} · {num(reg[(7, 'Random Forest')])}\n"
          f"30 dias: {num(reg[(30, 'Ridge')])} · {num(reg[(30, 'Random Forest')])}",
          f"Em 30 dias, não superam a tendência\n({num(reg[(30, 'Tendência 30d')])}): o volume depende da chuva futura"],
@@ -132,10 +137,10 @@ def main() -> None:
         Paragraph("1) Tratar o volume no fim de março como indicador-chave: de abril a setembro o sistema perde de 1,5 a 5 p.p. por mês. "
                   "2) A partir de abril, acompanhar semanalmente a autonomia (I5); abaixo de 30 dias, preparar comunicação e planos da "
                   "faixa seguinte. 3) Incorporar previsão sazonal de chuva e vazão de jusante antes de publicar previsões de volume. "
-                  "4) Estender a análise aos demais sistemas da RMSP.", base),
+                  "4) Estender o monitoramento de autonomia ao Alto Tietê, que chegou ao mesmo nível crítico em 2025.", base),
         Paragraph("Responsabilidade", h),
         Paragraph("Os alertas são recomendações para avaliação humana; não confirmam crise nem autorizam racionamento. Amostra curta "
-                  "(menos de 3 anos, 6 mudanças de faixa); sem dados pessoais; análise reproduzível no notebook do projeto.", base),
+                  "(diária: menos de 3 anos; mensal: 17 pioras em 16 anos); sem dados pessoais; análise reproduzível no notebook do projeto.", base),
     ]
     OUT.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(str(OUT), pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=11 * mm,

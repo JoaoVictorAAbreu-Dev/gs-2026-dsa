@@ -10,6 +10,15 @@
 | Extração | Mês a mês em 08/11/2026 (`data/raw/monthly/AAAA-MM.csv`); consolidado em `data/cantareira_diario_2024_2026.csv` |
 | SHA-256 do consolidado | `26e757200fd89261a807db1afe79ce50a1c6bc893970ac20697eb800e93c600a` |
 
+## Séries complementares (mensais)
+
+| Arquivo | Conteúdo |
+|---|---|
+| `data/raw/mensal/cantareira_2010_2023.csv` | Cantareira, jan/2010–dez/2023: volume útil médio (%), chuva do mês (mm), vazão natural e produzida médias (m³/s). Valores negativos em 2014–2016 indicam uso da reserva técnica. |
+| `data/raw/mensal/sistemas_rmsp_2024_2026.csv` | Alto Tietê, Guarapiranga, Cotia, Rio Grande, Rio Claro, São Lourenço e Sistema Integrado Metropolitano, jan/2024–out/2026: volume útil médio (%) e chuva (mm). |
+
+Endpoint: `/api/v4/sistemas/{id}/dados/mensal/{início}/{fim}` (IDs 64–69, 72 e 75 no cadastro do portal). O valor mensal é a média diária do volume e a soma da chuva no mês — conferido mês a mês com a série diária do Cantareira de 2024.
+
 ## Variáveis
 
 | Coluna | Campo no portal | Unidade | Observação |
