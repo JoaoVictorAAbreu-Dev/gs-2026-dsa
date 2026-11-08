@@ -3,8 +3,4 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ipynb_checkpoints/
-data/raw/
-data/processed/
-reports/
-deliverables/
 *.log

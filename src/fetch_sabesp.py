@@ -1,97 +1,85 @@
-"""Download a fixed daily Cantareira series from Sabesp's current web endpoint."""
+"""Baixa a série diária do Sistema Cantareira no Portal dos Mananciais (Sabesp), mês a mês.
+
+Uso: python -m src.fetch_sabesp [AAAA-MM-DD início] [AAAA-MM-DD fim]
+Gera data/raw/monthly/AAAA-MM.csv e data/cantareira_diario_2024_2026.csv.
+O endpoint é o mesmo usado pelo site da Sabesp e não é uma API documentada.
+"""
 
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
-from datetime import date, datetime, timezone
+import sys
+from datetime import date, timedelta
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-
-START = date(2024, 1, 1)
-END = date(2025, 12, 31)
-SYSTEM_ID = 64  # Cantareira in the Sabesp website's /api/v4/sistemas response.
-URL = (
-    "https://mananciais.sabesp.com.br/api/v4/sistemas/"
-    f"{SYSTEM_ID}/dados/diario/{START.isoformat()}/{END.isoformat()}"
-)
+SYSTEM_ID = 64  # Cantareira no cadastro /api/v4/sistemas do portal
+BASE = "https://mananciais.sabesp.com.br/api/v4/sistemas/{id}/dados/diario/{inicio}/{fim}"
 ROOT = Path(__file__).resolve().parents[1]
-RAW = ROOT / "data/raw/cantareira_2024_2025.json"
-CSV = ROOT / "data/processed/cantareira_daily.csv"
-METADATA = ROOT / "data/processed/source_metadata.json"
+MONTHLY = ROOT / "data" / "raw" / "monthly"
+CSV_OUT = ROOT / "data" / "cantareira_diario_2024_2026.csv"
+FIELDS = {
+    "storage_pct": "volumeUtilArmazenadoPorcentagem",
+    "rain_mm": "chuva",
+    "natural_inflow_m3s": "vazaoNatural",
+    "produced_flow_m3s": "vazaoProduzida",
+}
 
 
-def normalize(payload: dict) -> list[dict[str, str]]:
+def normalize(payload: dict, start: date, end: date) -> list[dict[str, str]]:
+    """Valida e normaliza um bloco JSON do portal para linhas diárias."""
     observations = payload.get("data")
     if not isinstance(observations, list) or not observations:
-        raise ValueError("Expected a nonempty data array")
-    normalized: list[dict[str, str]] = []
+        raise ValueError("Esperado um array 'data' não vazio")
+    rows = []
     for item in observations:
-        if item.get("idSistema") != SYSTEM_ID:
+        if item.get("idSistema") not in (None, SYSTEM_ID):
             raise ValueError("Unexpected system ID")
-        observed = date.fromisoformat(item["date"][:10])
-        if not START <= observed <= END:
-            raise ValueError("Date outside requested interval")
-        value = item.get("volumeUtilArmazenadoPorcentagem")
-        if value is None:
-            raise ValueError(f"Missing storage percentage at {observed}")
-        storage = float(value)
-        if not 0 <= storage <= 100:
-            raise ValueError(f"Invalid storage percentage at {observed}")
-        rain = item.get("chuva")
-        normalized.append(
-            {
-                "date": observed.isoformat(),
-                "system": "Cantareira",
-                "storage_pct": str(storage),
-                "rain_mm": "" if rain is None else str(float(rain)),
-            }
-        )
-    normalized.sort(key=lambda row: row["date"])
-    if len({row["date"] for row in normalized}) != len(normalized):
-        raise ValueError("Duplicate dates in source")
-    return normalized
+        observed = date.fromisoformat(str(item["date"])[:10])
+        if not start <= observed <= end:
+            raise ValueError("Data fora do intervalo pedido")
+        row = {"date": observed.isoformat()}
+        for column, key in FIELDS.items():
+            value = item.get(key)
+            if value is None:
+                raise ValueError(f"{key} ausente em {observed}")
+            row[column] = f"{float(value):.5f}"
+        if not 0 <= float(row["storage_pct"]) <= 100:
+            raise ValueError(f"Volume útil inválido em {observed}")
+        rows.append(row)
+    rows.sort(key=lambda r: r["date"])
+    if len({r["date"] for r in rows}) != len(rows):
+        raise ValueError("Datas duplicadas na fonte")
+    return rows
 
 
-def main() -> None:
-    request = Request(URL, headers={"User-Agent": "GS-FIAP-academic-research/1.0"})
-    with urlopen(request, timeout=45) as response:
-        raw = response.read()
-    payload = json.loads(raw)
-    rows = normalize(payload)
-    RAW.parent.mkdir(parents=True, exist_ok=True)
-    CSV.parent.mkdir(parents=True, exist_ok=True)
-    RAW.write_bytes(raw)
-    with CSV.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["date", "system", "storage_pct", "rain_mm"])
+def months(start: date, end: date):
+    cursor = start.replace(day=1)
+    while cursor <= end:
+        nxt = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+        yield max(cursor, start), min(nxt - timedelta(days=1), end)
+        cursor = nxt
+
+
+def main(start: date, end: date) -> None:
+    MONTHLY.mkdir(parents=True, exist_ok=True)
+    all_rows = []
+    for inicio, fim in months(start, end):
+        url = BASE.format(id=SYSTEM_ID, inicio=inicio.isoformat(), fim=fim.isoformat())
+        with urlopen(Request(url, headers={"User-Agent": "GS-FIAP-pesquisa-academica/2.0"}), timeout=45) as resp:
+            rows = normalize(json.loads(resp.read()), inicio, fim)
+        with (MONTHLY / f"{inicio:%Y-%m}.csv").open("w", newline="", encoding="utf-8") as handle:
+            csv.writer(handle).writerows([[r["date"], *[r[c] for c in FIELDS]] for r in rows])
+        all_rows.extend(rows)
+        print(f"{inicio:%Y-%m}: {len(rows)} dias")
+    with CSV_OUT.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["date", "system", *FIELDS])
         writer.writeheader()
-        writer.writerows(rows)
-    METADATA.write_text(
-        json.dumps(
-            {
-                "source_page": "https://mananciais.sabesp.com.br/base-dados",
-                "data_url": URL,
-                "system_id": SYSTEM_ID,
-                "system": "Cantareira",
-                "period_start": rows[0]["date"],
-                "period_end": rows[-1]["date"],
-                "rows": len(rows),
-                "downloaded_at_utc": datetime.now(timezone.utc).isoformat(),
-                "sha256_raw": hashlib.sha256(raw).hexdigest(),
-                "units": {"storage_pct": "% of useful stored volume", "rain_mm": "mm (daily rain)"},
-                "license": "Not located; raw data excluded from repository pending confirmation",
-                "endpoint_status": "Used by Sabesp website JS; not confirmed as documented public API",
-            },
-            ensure_ascii=False,
-            indent=2,
-        ) + "\n",
-        encoding="utf-8",
-    )
-    print(f"Downloaded {len(rows)} daily observations: {rows[0]['date']}..{rows[-1]['date']}")
-    print(CSV)
+        writer.writerows({**r, "system": "Cantareira"} for r in all_rows)
+    print(f"{len(all_rows)} dias gravados em {CSV_OUT}")
 
 
 if __name__ == "__main__":
-    main()
+    args = [date.fromisoformat(a) for a in sys.argv[1:3]]
+    main(args[0] if args else date(2024, 1, 1), args[1] if len(args) > 1 else date(2026, 11, 7))

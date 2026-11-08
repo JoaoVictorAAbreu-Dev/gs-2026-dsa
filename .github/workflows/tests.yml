@@ -1,7 +1,8 @@
-name: Python tests
+name: Testes e execução do notebook
 on:
   push:
   pull_request:
+  workflow_dispatch:
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -9,6 +10,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: '3.12'
+          cache: pip
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+      - name: Executar o notebook do início ao fim
+        run: jupyter nbconvert --to notebook --execute notebooks/analise_risco_hidrico_cantareira.ipynb --output /tmp/executado.ipynb
+      - name: Gerar a síntese executiva
+        run: python scripts/build_executive_summary.py

@@ -1,0 +1,118 @@
+{
+  "periodo": [
+    "01/01/2024",
+    "07/11/2026"
+  ],
+  "dias": 1042,
+  "situacao_atual": {
+    "data de referência": "07/11/2026",
+    "volume útil": "52.94 %",
+    "faixa de operação": "2 · Atenção",
+    "tendência 30 dias": "+11.12 p.p.",
+    "balanço parcial 30 dias": "+36.2 m³/s",
+    "probabilidade de piora de faixa (30 dias)": "0%",
+    "projeção de volume em 30 dias (tendência)": "64.1 % (intervalo 80 %: 58.6 a 69.9 %)",
+    "NÍVEL DE ALERTA": "Atenção"
+  },
+  "regressao": [
+    {
+      "horizonte": 7,
+      "modelo": "Ridge",
+      "MAE": 0.767,
+      "RMSE": 1.248,
+      "viés": -0.149,
+      "n": 638
+    },
+    {
+      "horizonte": 7,
+      "modelo": "Tendência 30d",
+      "MAE": 0.798,
+      "RMSE": 1.279,
+      "viés": 0.014,
+      "n": 638
+    },
+    {
+      "horizonte": 7,
+      "modelo": "Random Forest",
+      "MAE": 0.935,
+      "RMSE": 1.403,
+      "viés": -0.298,
+      "n": 638
+    },
+    {
+      "horizonte": 7,
+      "modelo": "Persistência",
+      "MAE": 1.097,
+      "RMSE": 1.514,
+      "viés": 0.105,
+      "n": 638
+    },
+    {
+      "horizonte": 30,
+      "modelo": "Tendência 30d",
+      "MAE": 3.219,
+      "RMSE": 4.717,
+      "viés": -0.11,
+      "n": 638
+    },
+    {
+      "horizonte": 30,
+      "modelo": "Random Forest",
+      "MAE": 3.914,
+      "RMSE": 5.125,
+      "viés": -2.514,
+      "n": 638
+    },
+    {
+      "horizonte": 30,
+      "modelo": "Ridge",
+      "MAE": 3.94,
+      "RMSE": 5.048,
+      "viés": -1.132,
+      "n": 638
+    },
+    {
+      "horizonte": 30,
+      "modelo": "Persistência",
+      "MAE": 4.342,
+      "RMSE": 5.365,
+      "viés": 0.28,
+      "n": 638
+    }
+  ],
+  "classificacao": [
+    {
+      "modelo": "Regra de autonomia",
+      "recall": 0.863,
+      "precisão": 0.591,
+      "F2": 0.79,
+      "AUC": NaN,
+      "falsos negativos": 14,
+      "falsos positivos": 61
+    },
+    {
+      "modelo": "Regressão Logística",
+      "recall": 0.853,
+      "precisão": 0.608,
+      "F2": 0.789,
+      "AUC": 0.931,
+      "falsos negativos": 15,
+      "falsos positivos": 56
+    },
+    {
+      "modelo": "Random Forest",
+      "recall": 0.382,
+      "precisão": 0.78,
+      "F2": 0.426,
+      "AUC": 0.903,
+      "falsos negativos": 63,
+      "falsos positivos": 11
+    }
+  ],
+  "dias_por_nivel": {
+    "Atenção": 471,
+    "Crítico": 221,
+    "Alerta": 168,
+    "Normal": 152
+  }
+}
