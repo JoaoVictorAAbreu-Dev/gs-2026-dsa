@@ -105,10 +105,6 @@ tests/                              testes unitários (faixas, indicadores, vaza
 - Os alertas organizam evidências para quem decide; **não** confirmam crise nem autorizam racionamento, que dependem da avaliação dos gestores competentes.
 - Não há dados pessoais no projeto.
 
-## Uso de IA generativa
-
-Usamos IA generativa como ferramenta de apoio (dúvidas, sugestões de código, depuração e revisão de textos). Todas as métricas e interpretações foram conferidas pela dupla nos resultados executados do notebook.
-
 ## Fontes
 
 - Sabesp — [Portal dos Mananciais, base de dados](https://mananciais.sabesp.com.br/base-dados)
